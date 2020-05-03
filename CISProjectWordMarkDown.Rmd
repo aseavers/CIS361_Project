@@ -1,0 +1,157 @@
+---
+title: "CIS 361 Project"
+author: "Allie Seavers"
+date: "5/1/2020"
+output: word_document
+---
+## Summary
+
+Movies seems to come out almost every month. With this vast range of a selection, most people like to give an opinion about a certain one. Along with their own opinion, people to like to what others think. Many people are shocked to see the ratings given by different organizations. These ratings can at times be drastically different from each other. This makes me wonder which source of these ratings gives an accurate representation of how the movie did in terms of revenue. Most researchers spend time either trying to give recommendations to a user based on movies they like or predicting a movie’s potential rating. There really isn’t a way to show which organization gives a better representation for how the public feels about a movie compared to the revenue made.
+
+This project will look through three different rating sources and compare values to see which one is a better indicator. The three are IMdB, Rotten Tomatoes Critic, and Rotten Tomatoes Audience. My theory is that IMdB will be the better indicator for the revenue reflecting by the ratings, as it does not have any strict guidelines to leave a review.
+
+After some analysis, it shocked me to see that Rotten Tomatoes actually fit the model best with the data I had collected, proving my theory wrong.
+
+
+## Literature Review
+
+After doing some research thanks to Google Scholar, there was not a lot of research done about the particular piece I want to focus on. Most of the articles were about how to predict a movie’s rating or a movie’s revenue.
+
+I was able to find one similar. In the article, “Dynamic Effects among Movie Ratings, Movie Revenues, and Viewer Satisfaction”, discussed various relationships that can bring a movie’s revenue up. One of the relationships was looking at ratings these movies held. They looked into different types of users and how a user may change their ratings over time.
+
+I want to go into something a bit simpler which can be used in the future. Which organization that gives back public ratings can be used to indicate which one is more accurate with the revenue received. Which brings me to a research question: Which organization has a more accurate representation of how well a movie is and did.
+
+I will be comparing with three different popular organizations: IMdB data, Rotten Tomatoes Critics data, and Rotten Tomatoes Audience data. 
+
+IMdB users can be consisted of anyone who creates an account on the website. These users can give any rating to any movie they desire.
+
+Rotten Tomatoes Critics have more requirements to have their review accepted. For example, one of the requirements to even be eligible for an individual are “Consistent output for a minimum of two years. Demonstrated film/TV coverage at a publication outside of a self-published website. However, we will consider critics who solely self-publish if their site and work reflect our key values.” There are a lot more requirements, but as you can see these users have high knowledge of how to rate a movie.
+
+Rotten Tomatoes Audience consist of ratings of users who have been verified to have bought a ticket for the movie.
+
+
+## Theory
+
+After investigating each of the organization, I believe that IMdB’s users will have a better representation of reflecting a movie’s revenue.
+
+## Data
+
+Now to begin, I needed to find some data to work with. I found a dataset that contained ratings from the three I am focusing on and more. It also contained the movie titles from the years 2016-2017. This data set provided me with plenty of data for me to do some calculations with. But I was missing the revenue for these movies. After some more digging, I found another data set that contained these. This dataset had a wider range of movies over different years.  
+
+```{r}
+library("readxl");
+
+movieRevenueTable <-read_excel("AllMoviesDetailsCleaned.xlsx");
+movieRatingsTable <-read_excel("movie_ratings_16_17.xlsx");
+
+head(movieRevenueTable);
+head(movieRatingsTable);
+```
+
+These two datasets contained quite a bit of information. I needed to clean the data to only show what I wanted.
+
+```{r, message=FALSE}
+library("dplyr");
+
+movieRatingsTable <-select(movieRatingsTable,movie,imdb,tmeter,audience);
+movieRevenueTable <- select(movieRevenueTable,revenue,title);
+```
+
+I decided to combine these two datasets into one based on movie titles. After the merge, I noticed that there were duplications over many rows of the same movie. I cleared out these duplications which made the dataset even smaller.
+
+```{r}
+merged <- merge(movieRatingsTable,movieRevenueTable,by.x = "movie",by.y = "title");
+
+noDuplicates <- merged[!duplicated(merged$movie), ];
+head(noDuplicates);
+```
+
+## Methodology
+
+After finishing cleaning the data, it was now time to do some calculations on the ratings. After looking at each rating column, I made the assumption was calculated differently. I figured the best way to make this easier was to normalize the data into a range. I decided to scale each rating to the range of 0 to 5.
+
+```{r, message=FALSE}
+library("BBmisc");
+
+justRatings <- select(noDuplicates,imdb,tmeter,audience);
+normalizedValues<- normalize(justRatings, method = "range", range = c(0, 5));
+moviesInfo <- mutate(noDuplicates,normalizedValues$tmeter, normalizedValues$imdb,normalizedValues$audience);
+
+head(moviesInfo);
+```
+After this, I got rid of the old ratings and kept the normalized ratings. I also adjusted the ratings to only show one decimal point.
+
+```{r}
+moviesInfo <- select(moviesInfo,movie,imdbN=`normalizedValues$imdb`,rTMCN=`normalizedValues$tmeter`,rTMUN=`normalizedValues$audience`,revenue);
+moviesInfo$rTMCN <- round(moviesInfo$rTMCN,digits=1);
+moviesInfo$rTMUN<- round(moviesInfo$rTMUN,digits=1);
+
+head(moviesInfo);
+```
+
+Then it was time to do some linear regression over each of these ratings against the revenues to study the relationship it provides.
+
+```{r, message=FALSE}
+library("jtools");
+movieReg <- lm(moviesInfo$revenue ~ moviesInfo$imdbN+ moviesInfo$rTMCN+ moviesInfo$rTMUN,data = moviesInfo);
+summ(movieReg);
+
+```
+
+## Results
+
+Looking at the summary from the linear regression above, this can help give a clearer image of the relationships. 
+
+For each increase of a positive rating for IMdB, there was an increase of revenue of 1,357,237.45.
+
+For each increase of a positive rating for RT Critics, there was a decrease of revenue of 6,804,534.17.
+
+For each increase of a positive rating for RT Audiences, there was an increase of revenue of 58,896,199.29.
+
+These numbers surprised me quite a bit. Another shocking piece of information is looking at the p values that were returned. The difference between IMdB and the RT Audience are vastly different. IMdB sees to give back a confidence level of 3% while RT Audience is giving back 96%.
+
+Below you will find graphing of each individual regression
+
+```{r}
+library("ggplot2");
+
+ggplot(movieReg, aes(x=moviesInfo$imdbN, y=moviesInfo$revenue)) + geom_point() +
+  geom_smooth(method="lm") + labs(x="IMdB Normalized Ratings", y="Revenue")
+ggplot(movieReg, aes(x=moviesInfo$rTMCN, y=moviesInfo$revenue)) + geom_point() +
+  geom_smooth(method="lm") + labs(x="Rotten Tomatoes Critics Normalized Ratings", y="Revenue")
+ggplot(movieReg, aes(x=moviesInfo$rTMUN, y=moviesInfo$revenue)) + geom_point() +
+  geom_smooth(method="lm") + labs(x="Rotten Tomatoes Users Normalized Ratings", y="Revenue") 
+```
+
+I also decided to graph the non-linear gression graphs to show what is currently in the dataset. The revenue is reduced to help make the numbers more clear.
+
+```{r}
+moviesInfo$revenue <- moviesInfo$revenue/10000000;
+
+plot(moviesInfo$imdbN,moviesInfo$revenue, main="IMdB User Ratings", xlab="Ratings", ylab="Revenue");
+plot(moviesInfo$rTMCN,moviesInfo$revenue, main="Rotten Tomato Critic Ratings", xlab="Ratings", ylab="Revenue");
+plot(moviesInfo$rTMUN,moviesInfo$revenue, main="Rotten Tomato User Ratings", xlab="Ratings", ylab="Revenue");
+
+```
+
+## Implications
+
+The results of this project have shown that the Rotten Tomato Audience ratings show a better relationship between the rating of a movie and its revenue. I would want to try this project again with a wider range of movies. There would need to be some recalculation for movies from past decades for inflation.
+
+## Conclusion
+
+This project has shown me that my original theory was incorrect. I believe there could also be some factors as to why this is. For RT Audience members, they were required to have purchased a ticket for a movie. This directly affects the revenue for the movie. For IMdB, a user could have given a movie a rating years after its release by watching it on their television. This factor does not tie to affecting the revenue.
+
+## References
+1.AllMoviesDetailsCleaned:
+https://www.kaggle.com/stephanerappeneau/350-000-movies-from-themoviedborg/data
+
+2.movie_ratings_16_17:
+https://github.com/mircealex/Movie_ratings_2016_17/blob/master/movie_ratings_16_17.csv
+
+3“Dynamic Effects among Movie Ratings, Movie Revenues, and Viewer Satisfaction”:
+https://www.researchgate.net/publication/259557588_Dynamic_Effects_Among_Movie_Ratings_Movie_Revenues_and_Viewer_Satisfaction
+
+4Rotten Tomato Links:
+https://www.rottentomatoes.com/about (Audience Definition)
+https://www.rottentomatoes.com/help_desk/critics (Critics Definition)
